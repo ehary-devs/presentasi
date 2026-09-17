@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="id" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sidang Skripsi — Implementasi Model Apriori pada Sistem Rekomendasi E-Book</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F3F4F0;
+  --card:#FFFFFF;
+  --ink:#16232E;
+  --ink-soft:#4A5760;
+  --ink-faint:#8B959C;
+  --rule:#D6D9D2;
+  --green:#2E5E4E;
+  --brass:#A87C24;
+  --clay:#8C4A3F;
+  --stage-shadow:0 1.2em 3.2em rgba(22,35,46,.16);
+  --serif:"Fraunces",Georgia,"Times New Roman",serif;
+  --sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0E161C;
+    --card:#16222B;
+    --ink:#E7EAE5;
+    --ink-soft:#A9B4BB;
+    --ink-faint:#71808A;
+    --rule:#2B3A45;
+    --green:#6FB396;
+    --brass:#D6A94C;
+    --clay:#D08A7C;
+    --stage-shadow:0 1.2em 3.2em rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0E161C;
+  --card:#16222B;
+  --ink:#E7EAE5;
+  --ink-soft:#A9B4BB;
+  --ink-faint:#71808A;
+  --rule:#2B3A45;
+  --green:#6FB396;
+  --brass:#D6A94C;
+  --clay:#D08A7C;
+  --stage-shadow:0 1.2em 3.2em rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+body{
+  margin:0;
+  background:var(--paper);
+  color:var(--ink);
+  font-family:var(--sans);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:1rem;padding:1rem;
+  overflow:hidden;
+}
+
+/* ---------- stage ---------- */
+#deck{
+  width:min(100% , calc((100dvh - 5.5rem) * 16 / 9));
+  aspect-ratio:16/9;
+  position:relative;
+  background:var(--card);
+  border:1px solid var(--rule);
+  box-shadow:var(--stage-shadow);
+  container-type:size;
+  overflow:hidden;
+}
+.slide{
+  position:absolute;inset:0;
+  display:none;
+  font-size:2.18cqh;
+  padding:4.2em 4.4em 3.2em 7.2em;
+  flex-direction:column;
+}
+.slide.on{display:flex}
+.slide.cover{padding:0}
+
+/* ---------- spine ---------- */
+.spine{
+  position:absolute;left:0;top:0;bottom:0;width:4.1em;
+  border-right:1px solid var(--rule);
+  display:flex;align-items:center;justify-content:center;
+}
+.spine span{
+  writing-mode:vertical-rl;transform:rotate(180deg);
+  font-size:.72em;letter-spacing:.14em;
+  color:var(--ink-faint);
+  font-weight:500;
+}
+.spine::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:.42em;background:var(--tint,var(--green));
+}
+.pageno{
+  position:absolute;right:2.2em;bottom:1.5em;
+  font-size:.72em;color:var(--ink-faint);font-variant-numeric:tabular-nums;
+}
+
+/* ---------- headings ---------- */
+h2{
+  font-family:var(--serif);font-weight:600;
+  font-size:2.05em;line-height:1.08;margin:0;
+  letter-spacing:-.012em;
+}
+.sub{
+  margin:.55em 0 0;font-size:.88em;color:var(--ink-soft);max-width:44ch;line-height:1.5;
+}
+.hr{height:.14em;background:var(--tint,var(--green));width:3.4em;margin:.9em 0 1.4em}
+.body{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center}
+
+/* ---------- lists ---------- */
+ol.num,ul.dash{margin:0;padding:0;list-style:none;display:grid;gap:.92em}
+ol.num li{display:grid;grid-template-columns:1.9em 1fr;align-items:start;font-size:.95em;line-height:1.45}
+ol.num li b{font-family:var(--serif);color:var(--brass);font-weight:600;font-size:1.05em}
+ul.dash li{padding-left:1.15em;position:relative;font-size:.95em;line-height:1.45}
+ul.dash li::before{content:"";position:absolute;left:0;top:.62em;width:.6em;height:1px;background:var(--tint,var(--green))}
+li strong{font-weight:600}
+li em{font-style:normal;color:var(--ink-soft)}
+
+/* ---------- cover ---------- */
+.cover-grid{height:100%;display:grid;grid-template-columns:1.35fr 1fr}
+.cover-main{padding:3.6em 3.2em;display:flex;flex-direction:column;justify-content:center;border-right:1px solid var(--rule)}
+.cover-side{padding:3.6em 2.6em;display:flex;flex-direction:column;justify-content:center;gap:1.5em;background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--green) 7%,transparent))}
+.kicker{font-size:.74em;letter-spacing:.2em;color:var(--brass);font-weight:600;margin-bottom:1.5em}
+.cover-main h1{
+  font-family:var(--serif);font-weight:600;font-size:2.28em;line-height:1.1;margin:0;letter-spacing:-.015em;
+}
+.cover-rule{height:.16em;width:5em;background:var(--green);margin:1.3em 0}
+.cover-main p{margin:0;font-size:.88em;color:var(--ink-soft);line-height:1.5;max-width:40ch}
+.rec{display:grid;gap:.28em}
+.rec dt{font-size:.68em;letter-spacing:.11em;color:var(--ink-faint);font-weight:500}
+.rec dd{margin:0;font-size:.92em;line-height:1.35}
+.rec dd small{display:block;color:var(--ink-soft);font-size:.8em;margin-top:.15em}
+
+/* ---------- tables ---------- */
+.tablewrap{overflow:auto;max-width:100%}
+table{border-collapse:collapse;width:100%;font-size:.78em;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:.55em .7em;border-bottom:1px solid var(--rule);vertical-align:top;line-height:1.3}
+thead th{
+  font-weight:600;font-size:.88em;color:var(--ink-soft);
+  border-bottom:1.5px solid var(--ink-soft);white-space:nowrap;
+}
+td.n,th.n{text-align:right}
+tr.pick td{background:color-mix(in srgb,var(--green) 12%,transparent);font-weight:600}
+tfoot td{border-bottom:none;color:var(--ink-faint);font-size:.9em;padding-top:.7em}
+
+/* ---------- metric grid ---------- */
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--rule);border:1px solid var(--rule)}
+.metric{background:var(--card);padding:1.15em 1.1em}
+.metric .v{font-family:var(--serif);font-size:1.95em;font-weight:600;line-height:1;color:var(--green)}
+.metric .v.amber{color:var(--brass)}
+.metric .v.warn{color:var(--clay)}
+.metric .k{font-size:.74em;color:var(--ink-soft);margin-top:.45em;line-height:1.35}
+
+/* ---------- funnel ---------- */
+.funnel{display:grid;gap:.5em}
+.step{display:grid;grid-template-columns:13.5em 1fr auto;align-items:center;gap:1em;font-size:.82em}
+.step .lbl{color:var(--ink-soft);line-height:1.25}
+.bar{height:1.5em;background:var(--green);opacity:.85}
+.step .val{font-family:var(--serif);font-weight:600;font-size:1.25em;font-variant-numeric:tabular-nums;min-width:4.6em;text-align:right}
+
+/* ---------- architecture ---------- */
+.arch{display:grid;grid-template-columns:1fr auto 1fr auto 1fr;align-items:stretch;gap:.9em}
+.box{border:1px solid var(--rule);border-top:.24em solid var(--tint,var(--green));padding:1em .95em;display:flex;flex-direction:column;gap:.4em}
+.box h4{margin:0;font-size:.88em;font-weight:600}
+.box p{margin:0;font-size:.74em;color:var(--ink-soft);line-height:1.4}
+.arrow{display:flex;align-items:center;color:var(--ink-faint);font-size:1.1em}
+.aside{margin-top:1.1em;border:1px dashed var(--ink-faint);padding:.9em 1em;display:flex;flex-direction:column;gap:.35em}
+.aside h4{margin:0;font-size:.85em;font-weight:600;color:var(--brass)}
+.aside p{margin:0;font-size:.74em;color:var(--ink-soft);line-height:1.45}
+
+/* ---------- formula ---------- */
+.formulas{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4em}
+.f{border-left:.18em solid var(--tint,var(--green));padding-left:.9em}
+.f h4{margin:0 0 .35em;font-size:.95em;font-family:var(--serif);font-weight:600}
+.f .eq{font-size:.8em;color:var(--ink);line-height:1.5}
+.f .eq i{font-style:italic}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;margin:0 .15em}
+.frac span:first-child{border-bottom:1px solid var(--ink-soft);padding:0 .3em}
+.frac span:last-child{padding:0 .3em}
+.f p{margin:.5em 0 0;font-size:.74em;color:var(--ink-soft);line-height:1.4}
+
+/* ---------- misc ---------- */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:2.2em}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:1.6em}
+.col h4{margin:0 0 .6em;font-size:.82em;letter-spacing:.06em;color:var(--brass);font-weight:600}
+.note{margin-top:1.1em;font-size:.78em;color:var(--ink-soft);line-height:1.45;border-left:.16em solid var(--brass);padding-left:.8em}
+.big{font-family:var(--serif);font-weight:600;color:var(--green)}
+.center{align-items:center;justify-content:center;text-align:center}
+.closing h2{font-size:2.6em}
+
+/* ---------- controls ---------- */
+#bar{
+  width:min(100%,calc((100dvh - 5.5rem) * 16 / 9));
+  display:flex;align-items:center;gap:.9rem;
+  font-size:.8rem;color:var(--ink-soft);
+}
+#bar button{
+  font:inherit;font-family:var(--sans);
+  background:transparent;border:1px solid var(--rule);color:var(--ink);
+  padding:.3rem .75rem;cursor:pointer;
+}
+#bar button:hover{border-color:var(--green)}
+#bar button:focus-visible,#deck:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+#track{flex:1;height:2px;background:var(--rule);position:relative}
+#fill{position:absolute;inset:0 auto 0 0;background:var(--green);width:0}
+#count{font-variant-numeric:tabular-nums;white-space:nowrap}
+#hint{white-space:nowrap;color:var(--ink-faint)}
+@media (max-width:760px){#hint{display:none}}
+@media (prefers-reduced-motion:no-preference){#fill{transition:width .25s ease}}
+</style>
+</head>
+<body>
+
+<div id="deck" tabindex="0">
+
+<!-- 1 COVER -->
+<section class="slide cover on">
+  <div class="cover-grid">
+    <div class="cover-main">
+      <div class="kicker">Ujian Sidang Skripsi</div>
+      <h1>Implementasi Model Apriori Association Rule Mining pada Sistem Rekomendasi E-Book Perpustakaan Digital</h1>
+      <div class="cover-rule"></div>
+      <p>Program Studi S1 Teknik Informatika · Fakultas Teknik dan Ilmu Komputer<br>Universitas Muhammadiyah Semarang · 2026</p>
+    </div>
+    <div class="cover-side">
+      <dl class="rec">
+        <dt>Disusun oleh</dt>
+        <dd>Riski Arya Putra<small>NIM C2C022010</small></dd>
+      </dl>
+      <dl class="rec">
+        <dt>Pembimbing I</dt>
+        <dd>Dr. Muhammad Munsarif, S.Kom., M.Kom.</dd>
+      </dl>
+      <dl class="rec">
+        <dt>Pembimbing II</dt>
+        <dd>Muhammad Sam'an, S.Si., M.Mat.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- 2 AGENDA -->
+<section class="slide" style="--tint:var(--ink-soft)">
+  <div class="spine"><span>Pengantar</span></div>
+  <h2>Alur presentasi</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ol class="num">
+      <li><b>1</b><span>Pendahuluan — latar belakang, rumusan masalah, batasan, dan tujuan</span></li>
+      <li><b>2</b><span>Landasan teori — Association Rule Mining dan algoritma Apriori</span></li>
+      <li><b>3</b><span>Metode penelitian — alur kerja dan dataset</span></li>
+      <li><b>4</b><span>Hasil perancangan dan implementasi sistem</span></li>
+      <li><b>5</b><span>Hasil pengolahan data dan evaluasi kinerja model</span></li>
+      <li><b>6</b><span>Kesimpulan dan saran</span></li>
+    </ol>
+  </div>
+  <div class="pageno">02</div>
+</section>
+
+<!-- 3 LATAR BELAKANG -->
+<section class="slide" style="--tint:var(--brass)">
+  <div class="spine"><span>BAB I · Pendahuluan</span></div>
+  <h2>Latar belakang</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ul class="dash">
+      <li>Perpustakaan digital menyimpan data transaksi peminjaman e-book dalam jumlah besar, namun <strong>belum dimanfaatkan</strong> sebagai dasar rekomendasi bacaan.</li>
+      <li>Association Rule Mining dengan algoritma Apriori efektif menemukan pola keterkaitan antar item, tetapi pembangkitan kandidat yang <strong>iteratif</strong> membuat kompleksitas komputasi meningkat tajam seiring bertambahnya data.</li>
+      <li>Apriori bersifat <strong>statis</strong> terhadap perubahan data — setiap penambahan transaksi menuntut perhitungan ulang. Diperlukan arsitektur yang memisahkan proses mining dari layanan rekomendasi.</li>
+      <li>Kualitas aturan sangat <strong>sensitif</strong> terhadap penetapan nilai minimum support dan minimum confidence.</li>
+      <li>Keterbatasan data peminjaman internal diatasi dengan dataset publik <strong>Bookcrossing</strong>, di mana rating diperlakukan sebagai representasi interaksi peminjaman.</li>
+    </ul>
+  </div>
+  <div class="pageno">03</div>
+</section>
+
+<!-- 4 RUMUSAN MASALAH -->
+<section class="slide" style="--tint:var(--brass)">
+  <div class="spine"><span>BAB I · Pendahuluan</span></div>
+  <h2>Rumusan masalah</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ol class="num">
+      <li><b>1</b><span>Bagaimana merancang arsitektur sistem Apriori yang mampu beradaptasi terhadap perubahan karakteristik data transaksi yang dinamis?</span></li>
+      <li><b>2</b><span>Bagaimana kinerja model Association Rule Mining pada Book Recommendation Dataset?</span></li>
+      <li><b>3</b><span>Bagaimana implementasi model Apriori pada sistem rekomendasi e-book perpustakaan digital berbasis website dan aplikasi mobile?</span></li>
+    </ol>
+  </div>
+  <div class="pageno">04</div>
+</section>
+
+<!-- 5 BATASAN -->
+<section class="slide" style="--tint:var(--brass)">
+  <div class="spine"><span>BAB I · Pendahuluan</span></div>
+  <h2>Batasan masalah</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ol class="num">
+      <li><b>1</b><span>Penelitian dibatasi pada perancangan dan penerapan arsitektur sistem rekomendasi berbasis <strong>algoritma Apriori</strong>, tanpa membahas arsitektur berbasis algoritma lain.</span></li>
+      <li><b>2</b><span>Evaluasi kinerja model dibatasi pada metrik <strong>akurasi, presisi, recall, dan F1-score</strong>, dengan nilai ambang support dan confidence ditetapkan berdasarkan karakteristik data transaksi peminjaman.</span></li>
+      <li><b>3</b><span>Implementasi dibatasi pada perpustakaan digital berbasis <strong>website dan aplikasi mobile</strong> menggunakan dataset Bookcrossing, tanpa integrasi data eksternal maupun sistem perpustakaan fisik.</span></li>
+    </ol>
+  </div>
+  <div class="pageno">05</div>
+</section>
+
+<!-- 6 TUJUAN -->
+<section class="slide" style="--tint:var(--brass)">
+  <div class="spine"><span>BAB I · Pendahuluan</span></div>
+  <h2>Tujuan penelitian</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ol class="num">
+      <li><b>1</b><span>Menentukan nilai <strong>minimum support</strong> dan <strong>minimum confidence</strong> yang tepat berdasarkan karakteristik data transaksi peminjaman.</span></li>
+      <li><b>2</b><span>Melakukan <strong>evaluasi kinerja model</strong> menggunakan akurasi, presisi, recall, dan F1-score.</span></li>
+      <li><b>3</b><span>Mengembangkan <strong>aplikasi perpustakaan digital</strong> berbasis website dan aplikasi mobile yang mengintegrasikan model tersebut.</span></li>
+    </ol>
+    <div class="note">Ketiga tujuan menjawab ketiga rumusan masalah secara berurutan dan menjadi kerangka pembahasan pada BAB IV.</div>
+  </div>
+  <div class="pageno">06</div>
+</section>
+
+<!-- 7 TEORI -->
+<section class="slide" style="--tint:var(--green)">
+  <div class="spine"><span>BAB II · Landasan Teori</span></div>
+  <h2>Tiga ukuran penyaring aturan asosiasi</h2>
+  <p class="sub">Aturan berbentuk <strong>A → B</strong>: pengguna yang meminjam buku A cenderung juga meminjam buku B.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="formulas">
+      <div class="f">
+        <h4>Support</h4>
+        <div class="eq">S(A→B) = <span class="frac"><span>n(A ∪ B)</span><span>N</span></span></div>
+        <p>Seberapa sering pasangan buku muncul bersama di seluruh transaksi. Menyaring pola yang terlalu jarang.</p>
+      </div>
+      <div class="f">
+        <h4>Confidence</h4>
+        <div class="eq">C(A→B) = <span class="frac"><span>n(A ∪ B)</span><span>n(A)</span></span></div>
+        <p>Dari seluruh peminjam A, berapa proporsi yang juga meminjam B. Mengukur kepastian prediktif aturan.</p>
+      </div>
+      <div class="f">
+        <h4>Lift</h4>
+        <div class="eq">L(A→B) = <span class="frac"><span>C(A→B)</span><span>S(B)</span></span></div>
+        <p>Berapa kali peluang meminjam B meningkat setelah meminjam A. Nilai &gt; 1 berarti korelasi positif.</p>
+      </div>
+    </div>
+    <div class="note">Prinsip anti-monoton Apriori: jika sebuah itemset tidak frequent, maka seluruh supersetnya pasti tidak frequent — inilah yang memangkas ruang pencarian pada setiap iterasi.</div>
+  </div>
+  <div class="pageno">07</div>
+</section>
+
+<!-- 8 METODE -->
+<section class="slide" style="--tint:var(--green)">
+  <div class="spine"><span>BAB III · Metode</span></div>
+  <h2>Alur penelitian</h2>
+  <p class="sub">Penelitian kuantitatif dengan pendekatan eksperimen, termasuk kategori penelitian terapan.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="three">
+      <div class="col">
+        <h4>Tahap data</h4>
+        <ul class="dash">
+          <li>Pengumpulan dataset Bookcrossing</li>
+          <li>Pra-pemrosesan: cleaning, transformation, selection</li>
+          <li>Pembagian data training dan testing (hold-out 80:20)</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Tahap pemodelan</h4>
+        <ul class="dash">
+          <li>Pembangkitan frequent itemset</li>
+          <li>Pembentukan aturan asosiasi</li>
+          <li>Evaluasi dengan presisi, recall, F1-score, dan lift</li>
+          <li>Penyimpanan model aturan terpilih</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Tahap sistem</h4>
+        <ul class="dash">
+          <li>Desain sistem dengan pemodelan UML</li>
+          <li>Implementasi mesin mining, backend, web, dan mobile</li>
+          <li>Pengujian fungsionalitas dan performa</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="pageno">08</div>
+</section>
+
+<!-- 9 DATASET -->
+<section class="slide" style="--tint:var(--green)">
+  <div class="spine"><span>BAB III · Metode</span></div>
+  <h2>Dataset Bookcrossing</h2>
+  <p class="sub">Data sekunder publik, dipilih karena keterbatasan volume data peminjaman pada sistem perpustakaan internal.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="metrics">
+      <div class="metric"><div class="v">1.030.543</div><div class="k">record rating mentah sebagai representasi interaksi peminjaman</div></div>
+      <div class="metric"><div class="v">271.045</div><div class="k">judul e-book dalam katalog</div></div>
+      <div class="metric"><div class="v">65.840</div><div class="k">pengguna dengan sedikitnya satu rating positif</div></div>
+    </div>
+    <div class="two" style="margin-top:1.5em">
+      <div class="col">
+        <h4>Atribut yang digunakan</h4>
+        <ul class="dash">
+          <li><strong>User-ID</strong> — pengenal transaksi</li>
+          <li><strong>ISBN</strong> — pengenal item (e-book)</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Bentuk transaksi</h4>
+        <ul class="dash">
+          <li>Data dikelompokkan per pengguna menjadi <em>{User-ID: [ISBN₁, ISBN₂, …]}</em> sebagai unit dasar association rule mining.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="pageno">09</div>
+</section>
+
+<!-- 10 PRA PEMROSESAN -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Hasil pra-pemrosesan data</h2>
+  <p class="sub">Penyusutan data dari record mentah hingga himpunan transaksi yang siap di-mining.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="funnel">
+      <div class="step"><div class="lbl">Rating mentah</div><div><div class="bar" style="width:100%"></div></div><div class="val">1.030.543</div></div>
+      <div class="step"><div class="lbl">Peminjaman tercatat (rating ≥ 5)</div><div><div class="bar" style="width:35.6%"></div></div><div class="val">367.036</div></div>
+      <div class="step"><div class="lbl">Buku lolos ambang ≥ 20 peminjam</div><div><div class="bar" style="width:8%"></div></div><div class="val">2.022</div></div>
+      <div class="step"><div class="lbl">Transaksi terbentuk (≥ 3 buku)</div><div><div class="bar" style="width:11%"></div></div><div class="val">7.100</div></div>
+      <div class="step"><div class="lbl">Rata-rata item per transaksi</div><div><div class="bar" style="width:3%"></div></div><div class="val">8,70</div></div>
+    </div>
+    <div class="note">Hanya <strong>2.022 dari 271.045 judul (0,75%)</strong> memenuhi syarat analisis, sementara 99,25% sisanya tidak cukup sering dipinjam bersama. Inilah kondisi <strong>data sparsity</strong> yang menjadi karakteristik utama data perpustakaan dan melandasi seluruh pemilihan parameter berikutnya.</div>
+  </div>
+  <div class="pageno">10</div>
+</section>
+
+<!-- 11 ARSITEKTUR -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Arsitektur sistem</h2>
+  <p class="sub">Menjawab rumusan masalah 1 — proses mining dipisahkan dari proses penyajian rekomendasi.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="arch">
+      <div class="box">
+        <h4>Mesin mining — PHP</h4>
+        <p>Pra-pemrosesan, iterasi Apriori, pembentukan aturan, dan evaluasi. Dijalankan dari halaman Data Mining administrator, terpisah dari alur permintaan pengguna.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box">
+        <h4>Persistensi — MySQL</h4>
+        <p>Aturan asosiasi beserta support, confidence, dan lift disimpan agar dapat dibaca ulang tanpa perhitungan baru.</p>
+      </div>
+      <div class="arrow">→</div>
+      <div class="box">
+        <h4>Penyajian — Web &amp; Android</h4>
+        <p>Antarmuka website dan aplikasi mobile mengonsumsi himpunan aturan yang sama dari basis data.</p>
+      </div>
+    </div>
+    <div class="aside">
+      <h4>Di luar sistem berjalan — skrip uji Python (pandas, mlxtend)</h4>
+      <p>Dipakai pada tahap awal penelitian untuk menguji kelayakan dataset Bookcrossing dan menetapkan konfigurasi parameter — minimum support 0,50%, confidence 30%, lift 1,20, rating ≥ 5, buku ≥ 20 peminjam, pengguna ≥ 3 buku. Hasilnya menjadi rujukan saat algoritma Apriori diimplementasikan ulang di sisi PHP. Skrip ini tidak dipanggil oleh website maupun aplikasi mobile.</p>
+    </div>
+    <div class="note">Beban komputasi iteratif Apriori tidak dirasakan pengguna saat membuka halaman rekomendasi, dan penambahan data transaksi baru cukup ditindaklanjuti dengan menjalankan ulang mining tanpa mengganggu ketersediaan layanan.</div>
+  </div>
+  <div class="pageno">11</div>
+</section>
+
+<!-- 12 IMPLEMENTASI -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Implementasi antarmuka</h2>
+  <p class="sub">Menjawab rumusan masalah 3 — model yang sama dikonsumsi dua platform.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="three">
+      <div class="col">
+        <h4>Website — sisi pengguna</h4>
+        <ul class="dash">
+          <li>Beranda</li><li>Katalog</li><li>Detail buku</li><li>Rekomendasi</li><li>Cara kerja</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Website — sisi administrator</h4>
+        <ul class="dash">
+          <li>Dashboard</li><li>Kelola buku, rating, dan pengguna</li><li><strong>Halaman Data Mining &amp; Apriori</strong> — menjalankan pra-pemrosesan, memantau tiap iterasi, meninjau distribusi confidence dan lift, serta melihat hasil evaluasi</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Aplikasi mobile Android</h4>
+        <ul class="dash">
+          <li>Layar pembuka</li><li>Beranda</li><li>Katalog</li><li>Detail buku</li><li>Rekomendasi</li><li>Cara kerja</li>
+        </ul>
+      </div>
+    </div>
+    <div class="note">Halaman <strong>Cara Kerja</strong> hadir di kedua platform agar rekomendasi bersifat transparan — pemustaka dapat menelusuri dasar perhitungan di balik setiap saran bacaan.</div>
+  </div>
+  <div class="pageno">12</div>
+</section>
+
+<!-- 13 ITERASI -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Hasil iterasi algoritma Apriori</h2>
+  <p class="sub">Parameter terpilih: minimum support 0,50% · minimum confidence 30% · minimum lift 1,20 · 7.100 transaksi.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Tahap</th><th class="n">Kandidat</th><th class="n">Lolos</th><th class="n">Rasio</th><th class="n">Waktu</th><th>Keterangan</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Iterasi 1 — 1-itemset</td><td class="n">2.021</td><td class="n">482</td><td class="n">23,85%</td><td class="n">&lt; 1 dtk</td><td>ISBN dengan support ≥ 0,50%</td></tr>
+          <tr><td>Iterasi 2 — 2-itemset</td><td class="n">115.921</td><td class="n">30</td><td class="n">0,03%</td><td class="n">± 4 dtk</td><td>Penyusutan drastis akibat data sparsity</td></tr>
+          <tr><td>Pembentukan aturan</td><td class="n">60</td><td class="n">50</td><td class="n">83,33%</td><td class="n">&lt; 1 dtk</td><td>10 aturan gugur karena confidence &lt; 30%</td></tr>
+        </tbody>
+        <tfoot>
+          <tr><td colspan="4">Total proses — termasuk pra-pemrosesan, mining, evaluasi, dan persistensi</td><td class="n">± 6 dtk</td><td></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="note">Penyusutan 2-itemset dari 115.921 menjadi 30 terjadi karena rata-rata transaksi hanya berisi 8,70 buku, jauh lebih kecil dibanding luas ruang katalog yang dianalisis (2.022 judul).</div>
+  </div>
+  <div class="pageno">13</div>
+</section>
+
+<!-- 14 ATURAN -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Aturan asosiasi dengan confidence tertinggi</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Jika meminjam</th><th>Maka meminjam</th><th class="n">Support</th><th class="n">Confidence</th><th class="n">Lift</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Harry Potter and the Sorcerer's Stone (1)</td><td>Harry Potter and the Chamber of Secrets (2)</td><td class="n">1,06%</td><td class="n">72,82%</td><td class="n">44,96</td></tr>
+          <tr><td>Harry Potter and the Chamber of Secrets (2)</td><td>Harry Potter and the Prisoner of Azkaban (3)</td><td class="n">1,14%</td><td class="n">70,43%</td><td class="n">41,33</td></tr>
+          <tr><td>Harry Potter and the Prisoner of Azkaban (3)</td><td>Harry Potter and the Chamber of Secrets (2)</td><td class="n">1,14%</td><td class="n">66,94%</td><td class="n">41,33</td></tr>
+          <tr><td>Harry Potter and the Goblet of Fire (4)</td><td>Harry Potter and the Prisoner of Azkaban (3)</td><td class="n">1,04%</td><td class="n">62,71%</td><td class="n">36,80</td></tr>
+          <tr><td>The Queen of the Damned</td><td>The Vampire Lestat</td><td class="n">0,65%</td><td class="n">57,50%</td><td class="n">34,00</td></tr>
+          <tr><td>Hot Six: A Stephanie Plum Novel</td><td>High Five: A Stephanie Plum Novel</td><td class="n">0,55%</td><td class="n">57,35%</td><td class="n">56,56</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">Seluruh 50 aturan memiliki keterkaitan positif yang kuat — lift minimum 14,65, rata-rata 32,21. Namun 86% aturan berada pada confidence 30–60%, dan seluruhnya hanya melibatkan <strong>23 judul unik</strong> yang didominasi buku berseri.</div>
+  </div>
+  <div class="pageno">14</div>
+</section>
+
+<!-- 15 SKENARIO -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Perbandingan enam skenario parameter</h2>
+  <p class="sub">Menjawab tujuan 1 — penetapan ambang berbasis karakteristik data, bukan angka konvensional.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Skenario</th><th class="n">Min. sup</th><th class="n">Min. conf</th><th class="n">L₁</th><th class="n">L₂</th><th class="n">Aturan</th><th class="n">Precision@10</th><th class="n">Recall@10</th><th class="n">F1</th><th class="n">User cov.</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1</td><td class="n">0,30%</td><td class="n">30%</td><td class="n">1.030</td><td class="n">114</td><td class="n">142</td><td class="n">4,32%</td><td class="n">6,02%</td><td class="n">5,03%</td><td class="n">17,70%</td></tr>
+          <tr class="pick"><td>2 — terpilih</td><td class="n">0,50%</td><td class="n">30%</td><td class="n">482</td><td class="n">30</td><td class="n">50</td><td class="n">5,40%</td><td class="n">8,65%</td><td class="n">6,65%</td><td class="n">5,55%</td></tr>
+          <tr><td>3</td><td class="n">1,00%</td><td class="n">30%</td><td class="n">135</td><td class="n">3</td><td class="n">6</td><td class="n">3,26%</td><td class="n">2,72%</td><td class="n">2,96%</td><td class="n">1,30%</td></tr>
+          <tr><td>4</td><td class="n">0,50%</td><td class="n">50%</td><td class="n">482</td><td class="n">30</td><td class="n">20</td><td class="n">11,05%</td><td class="n">12,57%</td><td class="n">11,76%</td><td class="n">2,55%</td></tr>
+          <tr><td>5</td><td class="n">0,50%</td><td class="n">70%</td><td class="n">482</td><td class="n">30</td><td class="n">2</td><td class="n">0,00%</td><td class="n">0,00%</td><td class="n">0,00%</td><td class="n">0,00%</td></tr>
+          <tr><td>6</td><td class="n">10,00%</td><td class="n">30%</td><td class="n">0</td><td class="n">0</td><td class="n">0</td><td class="n">0,00%</td><td class="n">0,00%</td><td class="n">0,00%</td><td class="n">0,00%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">Ambang yang lazim pada analisis ritel terbukti tidak dapat dipindahkan begitu saja: <strong>min. support 10% tidak menghasilkan frequent itemset sama sekali</strong>, dan <strong>min. confidence 70% hanya menyisakan 2 aturan</strong> dengan seluruh metrik bernilai nol. Skenario 2 dipilih sebagai titik seimbang antara ketepatan dan jangkauan pengguna.</div>
+  </div>
+  <div class="pageno">15</div>
+</section>
+
+<!-- 16 EVALUASI -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Evaluasi performa model</h2>
+  <p class="sub">Skema hold-out 80:20 pada skenario terpilih — aturan dibangun ulang hanya dari data training, lalu diuji pada buku yang disembunyikan.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="metrics">
+      <div class="metric"><div class="v">5,40%</div><div class="k">Precision@10 — rata-rata 0,54 dari 10 buku yang direkomendasikan benar-benar relevan</div></div>
+      <div class="metric"><div class="v">8,65%</div><div class="k">Recall@10 — proporsi buku relevan yang berhasil ditemukan kembali</div></div>
+      <div class="metric"><div class="v">6,65%</div><div class="k">F1-Score — rata-rata harmonis presisi dan recall</div></div>
+      <div class="metric"><div class="v amber">32,21×</div><div class="k">Rata-rata lift — setiap aturan melipatgandakan peluang peminjaman buku konsekuen</div></div>
+      <div class="metric"><div class="v warn">5,55%</div><div class="k">User coverage — 394 dari 7.100 pengguna memperoleh sedikitnya satu rekomendasi</div></div>
+      <div class="metric"><div class="v warn">0,40%</div><div class="k">Catalog coverage — hanya 23 judul dari 271.045 yang pernah muncul sebagai rekomendasi</div></div>
+    </div>
+    <div class="note">Model menghasilkan aturan yang <strong>sangat kuat secara statistik namun sempit jangkauannya</strong>. Mining pada 80% data hanya menyisakan 22 dari 50 aturan — penurunan 56% akibat pengurangan 20% data menegaskan kembali tingginya sparsity.</div>
+  </div>
+  <div class="pageno">16</div>
+</section>
+
+<!-- 17 REPRODUSIBILITAS -->
+<section class="slide" style="--tint:var(--clay)">
+  <div class="spine"><span>BAB IV · Hasil</span></div>
+  <h2>Uji reprodusibilitas</h2>
+  <p class="sub">Skenario 2 dieksekusi ulang pada waktu berbeda dengan parameter identik.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>Metrik</th><th class="n">Eksekusi pertama</th><th class="n">Eksekusi ulang</th><th class="n">Selisih</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Transaksi terbentuk</td><td class="n">7.100</td><td class="n">7.100</td><td class="n">0</td></tr>
+          <tr><td>Frequent 1-itemset / 2-itemset</td><td class="n">482 / 30</td><td class="n">482 / 30</td><td class="n">0</td></tr>
+          <tr><td>Jumlah aturan</td><td class="n">50</td><td class="n">50</td><td class="n">0</td></tr>
+          <tr><td>Precision@10</td><td class="n">5,4019%</td><td class="n">5,4019%</td><td class="n">0</td></tr>
+          <tr><td>Recall@10</td><td class="n">8,6506%</td><td class="n">8,6506%</td><td class="n">0</td></tr>
+          <tr><td>F1-Score</td><td class="n">6,6507%</td><td class="n">6,6507%</td><td class="n">0</td></tr>
+          <tr><td>Rata-rata lift</td><td class="n">32,210059</td><td class="n">32,210059</td><td class="n">0</td></tr>
+          <tr><td>Durasi komputasi</td><td class="n">8 detik</td><td class="n">6 detik</td><td class="n">2 detik</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="note">Seluruh metrik statistik identik. Determinisme dicapai melalui dua keputusan rancangan: pembentukan transaksi berdasarkan pengurutan user_id dan ISBN, serta pembagian hold-out 80:20 berbasis urutan ISBN — sehingga hasil dapat direproduksi secara konsisten.</div>
+  </div>
+  <div class="pageno">17</div>
+</section>
+
+<!-- 18 KESIMPULAN -->
+<section class="slide" style="--tint:var(--green)">
+  <div class="spine"><span>BAB V · Penutup</span></div>
+  <h2>Kesimpulan</h2>
+  <div class="hr"></div>
+  <div class="body">
+    <ol class="num">
+      <li><b>1</b><span><strong>Arsitektur.</strong> Sistem berhasil dirancang dengan memisahkan proses mining dari penyajian rekomendasi — mesin Apriori dan logika bisnis ditangani backend PHP, dengan persistensi aturan pada MySQL. Penambahan data baru cukup ditindaklanjuti dengan mining terjadwal tanpa mengganggu ketersediaan layanan.</span></li>
+      <li><b>2</b><span><strong>Kinerja model.</strong> Pra-pemrosesan menyisakan 7.100 transaksi dari 1.030.543 rating dengan tingkat sparsity sangat tinggi. Konfigurasi terpilih — support 0,50%, confidence 30%, lift 1,20 — menghasilkan 482 frequent 1-itemset, 30 frequent 2-itemset, dan 50 aturan dengan rata-rata lift 32,21. Evaluasi hold-out memberi Precision@10 5,40%, Recall@10 8,65%, dan F1-Score 6,65%.</span></li>
+      <li><b>3</b><span><strong>Implementasi.</strong> Model terintegrasi pada website (sisi pengguna dan administrator) serta aplikasi Android yang mengonsumsi aturan yang sama, dilengkapi halaman Cara Kerja sebagai jaminan transparansi perhitungan.</span></li>
+    </ol>
+  </div>
+  <div class="pageno">18</div>
+</section>
+
+<!-- 19 SARAN -->
+<section class="slide" style="--tint:var(--green)">
+  <div class="spine"><span>BAB V · Penutup</span></div>
+  <h2>Keterbatasan dan saran</h2>
+  <p class="sub">Model bekerja optimal hanya pada kelompok buku berseri dan belum melayani 94,45% pengguna.</p>
+  <div class="hr"></div>
+  <div class="body">
+    <div class="three">
+      <div class="col">
+        <h4>Bagi pengembang sistem</h4>
+        <ul class="dash">
+          <li>Pendekatan hibrida dengan content-based atau collaborative filtering</li>
+          <li>Penanganan duplikasi judul dan penyaringan rekomendasi antar judul satu seri</li>
+          <li>Penjadwalan mining otomatis dan strategi incremental mining</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Bagi penelitian selanjutnya</h4>
+        <ul class="dash">
+          <li>Menggunakan data peminjaman riil dari perpustakaan internal</li>
+          <li>Membandingkan Apriori dengan FP-Growth pada data yang sama</li>
+          <li>Memperluas evaluasi dengan NDCG, MAP, novelty, dan diversity</li>
+        </ul>
+      </div>
+      <div class="col">
+        <h4>Bagi perpustakaan</h4>
+        <ul class="dash">
+          <li>Pencatatan transaksi peminjaman yang konsisten dan lengkap</li>
+          <li>Memanfaatkan temuan konsentrasi peminjaman untuk pengadaan dan promosi koleksi</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+  <div class="pageno">19</div>
+</section>
+
+<!-- 20 PENUTUP -->
+<section class="slide center closing" style="--tint:var(--brass)">
+  <div class="spine"><span>Penutup</span></div>
+  <div class="body center">
+    <h2>Terima kasih</h2>
+    <div class="cover-rule" style="margin:1.2em auto"></div>
+    <p class="sub" style="max-width:46ch;margin:0 auto">Riski Arya Putra · C2C022010<br>S1 Teknik Informatika, Universitas Muhammadiyah Semarang<br><br>Mohon arahan dan masukan dari Bapak/Ibu Dewan Penguji.</p>
+  </div>
+  <div class="pageno">20</div>
+</section>
+
+</div>
+
+<div id="bar">
+  <button id="prev" aria-label="Slide sebelumnya">← Sebelumnya</button>
+  <button id="next" aria-label="Slide berikutnya">Berikutnya →</button>
+  <div id="track"><div id="fill"></div></div>
+  <div id="count">1 / 20</div>
+  <button id="fs">Layar penuh</button>
+  <div id="hint">Panah kiri/kanan · spasi</div>
+</div>
+
+<script>
+(function(){
+  var slides = Array.prototype.slice.call(document.querySelectorAll('.slide'));
+  var i = 0;
+  var deck = document.getElementById('deck');
+  var fill = document.getElementById('fill');
+  var count = document.getElementById('count');
+
+  function show(n){
+    i = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function(s, k){ s.classList.toggle('on', k === i); });
+    fill.style.width = ((i) / (slides.length - 1) * 100) + '%';
+    count.textContent = (i + 1) + ' / ' + slides.length;
+  }
+
+  document.getElementById('next').addEventListener('click', function(){ show(i + 1); deck.focus(); });
+  document.getElementById('prev').addEventListener('click', function(){ show(i - 1); deck.focus(); });
+  document.getElementById('fs').addEventListener('click', function(){
+    if (document.fullscreenElement) { document.exitFullscreen(); }
+    else if (document.documentElement.requestFullscreen) { document.documentElement.requestFullscreen(); }
+    deck.focus();
+  });
+
+  deck.addEventListener('click', function(e){
+    var r = deck.getBoundingClientRect();
+    show(e.clientX - r.left < r.width * 0.3 ? i - 1 : i + 1);
+  });
+
+  document.addEventListener('keydown', function(e){
+    var k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown' || k === ' ' || k === 'Enter'){ e.preventDefault(); show(i + 1); }
+    else if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace'){ e.preventDefault(); show(i - 1); }
+    else if (k === 'Home'){ e.preventDefault(); show(0); }
+    else if (k === 'End'){ e.preventDefault(); show(slides.length - 1); }
+  });
+
+  show(0);
+  deck.focus();
+})();
+</script>
+</body>
+</html>
