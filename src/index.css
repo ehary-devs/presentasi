@@ -8,7 +8,7 @@
   --green:#6FB396;
   --brass:#D6A94C;
   --clay:#D08A7C;
-  --stage-shadow:0 1.2em 3.2em rgba(0,0,0,.5);
+  --stage-shadow:0 0 0.6em rgba(0,0,0,.1);
   --serif:"Fraunces",Georgia,"Times New Roman",serif;
   --sans:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
 }
@@ -60,12 +60,15 @@ body{
 }
 .spine span{
   writing-mode:vertical-rl;transform:rotate(180deg);
-  font-size:.95em;letter-spacing:.16em;
+  font-size:.85em;letter-spacing:.12em;
   color:var(--ink-soft);
-  font-weight:600;
+  font-weight:500;
+  text-transform:uppercase;
+  opacity:.7;
+  -webkit-font-smoothing:antialiased;
 }
 .spine::before{
-  content:"";position:absolute;left:0;top:0;bottom:0;width:.42em;background:var(--tint,var(--green));
+  display:none;
 }
 .pageno{
   position:absolute;right:2.2em;bottom:1.5em;
